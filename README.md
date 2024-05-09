@@ -1,4 +1,3 @@
-```markdown
 # Files Manager - Back-End Project
 
 ## Curriculum Overview
