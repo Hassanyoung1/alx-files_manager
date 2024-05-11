@@ -15,17 +15,14 @@ class UsersController {
       return res.status(400).json({ error: 'Missing password' });
     }
 
-    // Check if email already exists
     const db = dbClient.client.db();
     const existingUser = await db.collection('users').findOne({ email });
     if (existingUser) {
       return res.status(400).json({ error: 'Already exist' });
     }
 
-    // Hash the password
     const hashedPassword = sha1(password);
 
-    // Save the user
     const newUser = { email, password: hashedPassword };
     const result = await db.collection('users').insertOne(newUser);
 
