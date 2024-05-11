@@ -1,19 +1,14 @@
 #!/usr/bin/node
 
-const express = require('express');
-// const bodyParser = require('body-parser');
+const express = require("express");
+const router = require("./routes/index");
 
-const app = express();
-const PORT = process.env.PORT || 5000;
-const routes = require('./routes/index');
+const server = express();
+const PORT = process.env.PORT || 5000
 
-// Middleware to parse JSON requests
-// app.use(bodyParser.json());
+server.use(express.json());
+server.use(router);
 
-// Define your routes
-app.use('/', routes);
-
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+server.listen(PORT, () =>
+  console.log(`The server is running on port: ${PORT}`)
+);
