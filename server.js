@@ -1,14 +1,14 @@
 #!/usr/bin/node
 
 const express = require('express');
-const bodyParser = require('body-parser');
+// const bodyParser = require('body-parser');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const routes = require('./routes/index');
 
 // Middleware to parse JSON requests
-app.use(bodyParser.json());
+// app.use(bodyParser.json());
 
 // Define your routes
 app.use('/', routes);
