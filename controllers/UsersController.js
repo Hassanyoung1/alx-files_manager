@@ -1,4 +1,6 @@
-const sha1 = require('sha1'); // Import the sha1 module for password hashing
+#!/usr/bin/env node
+
+const sha1 = require('sha1');
 const dbClient = require('../utils/db');
 
 class UsersController {
