@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const dbClient = require('../utils/db');
+const DBClient = require('../utils/db');  // Adjusted import
 const redisClient = require('../utils/redis');
 
 class FilesController {
@@ -25,7 +25,12 @@ class FilesController {
       return res.status(400).send({ error: 'Missing data' });
     }
 
-    const parent = await dbClient.db.collection('files').findOne({ _id: parentId });
+    const db = new DBClient(); // Adjusted instantiation
+    if (!db.isAlive()) {
+      return res.status(500).send({ error: 'Database connection error' });
+    }
+
+    const parent = await db.getUserById(parentId);
     if (parentId !== '0' && (!parent || parent.type !== 'folder')) {
       return res.status(400).send({ error: 'Parent not found or is not a folder' });
     }
@@ -51,7 +56,7 @@ class FilesController {
       localPath: filePath,
     };
 
-    const result = await dbClient.db.collection('files').insertOne(newFile);
+    const result = await db.createFile(newFile);
 
     return res.status(201).send({
       id: result.insertedId,
