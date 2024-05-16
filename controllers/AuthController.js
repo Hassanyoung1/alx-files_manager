@@ -1,61 +1,153 @@
-import { createHash } from 'crypto';
-import { v4 } from 'uuid';
+/* eslint-disable import/no-named-as-default */
+import dbClient from '../../utils/db';
 
-import dbClient from '../utils/db';
-import getUserByToken from '../utils/getUser';
-import redisClient from '../utils/redis';
+describe('+ AuthController', () => {
+  const mockUser = {
+    email: 'kaido@beast.com',
+    password: 'hyakuju_no_kaido_wano',
+  };
+  let token = '';
 
-export default class AuthController {
-  // Sign-in a user by generating a new authentication token
-  static async getConnect(req, res) {
-    // Obtain the Authorization header
-    const auth = req.headers.authorization;
-    if (!auth || !auth.startsWith('Basic ')) {
-      res.status(401).send({ error: 'Unauthorized' });
-      return;
-    }
+  before(function (done) {
+    this.timeout(10000);
+    dbClient.usersCollection()
+      .then((usersCollection) => {
+        usersCollection.deleteMany({ email: mockUser.email })
+          .then(() => {
+            request.post('/users')
+              .send({
+                email: mockUser.email,
+                password: mockUser.password,
+              })
+              .expect(201)
+              .end((requestErr, res) => {
+                if (requestErr) {
+                  return done(requestErr);
+                }
+                expect(res.body.email).to.eql(mockUser.email);
+                expect(res.body.id.length).to.be.greaterThan(0);
+                done();
+              });
+          })
+          .catch((deleteErr) => done(deleteErr));
+      }).catch((connectErr) => done(connectErr));
+  });
 
-    // Decode the Base64 credentials
-    const credentials = Buffer.from(auth.split(' ')[1], 'base64').toString('utf-8');
+  describe('+ GET: /connect', () => {
+    it('+ Fails with no "Authorization" header field', function (done) {
+      this.timeout(5000);
+      request.get('/connect')
+        .expect(401)
+        .end((err, res) => {
+          if (err) {
+            return done(err);
+          }
+          expect(res.body).to.deep.eql({ error: 'Unauthorized' });
+          done();
+        });
+    });
 
-    // Extract the email and password from the credentials
-    const [email, password] = credentials.split(':');
+    it('+ Fails for a non-existent user', function (done) {
+      this.timeout(5000);
+      request.get('/connect')
+        .auth('foo@bar.com', 'raboof', { type: 'basic' })
+        .expect(401)
+        .end((err, res) => {
+          if (err) {
+            return done(err);
+          }
+          expect(res.body).to.deep.eql({ error: 'Unauthorized' });
+          done();
+        });
+    });
 
-    // Check if the email and password are valid
-    const user = await dbClient.getUserBy({ email });
-    const hashedPassword = createHash('sha1').update(password).digest('hex');
+    it('+ Fails with a valid email and wrong password', function (done) {
+      this.timeout(5000);
+      request.get('/connect')
+        .auth(mockUser.email, 'raboof', { type: 'basic' })
+        .expect(401)
+        .end((err, res) => {
+          if (err) {
+            return done(err);
+          }
+          expect(res.body).to.deep.eql({ error: 'Unauthorized' });
+          done();
+        });
+    });
 
-    // Compare the hashed password with the password stored in the database
-    if (!user || user.password !== hashedPassword) {
-      res.status(401).send({ error: 'Unauthorized' });
-      return;
-    }
+    it('+ Fails with an invalid email and valid password', function (done) {
+      this.timeout(5000);
+      request.get('/connect')
+        .auth('zoro@strawhat.com', mockUser.password, { type: 'basic' })
+        .expect(401)
+        .end((err, res) => {
+          if (err) {
+            return done(err);
+          }
+          expect(res.body).to.deep.eql({ error: 'Unauthorized' });
+          done();
+        });
+    });
 
-    // Generate a new authentication token with uuidv4
-    const token = v4();
+    it('+ Succeeds for an existing user', function (done) {
+      this.timeout(5000);
+      request.get('/connect')
+        .auth(mockUser.email, mockUser.password, { type: 'basic' })
+        .expect(200)
+        .end((err, res) => {
+          if (err) {
+            return done(err);
+          }
+          expect(res.body.token).to.exist;
+          expect(res.body.token.length).to.be.greaterThan(0);
+          token = res.body.token;
+          done();
+        });
+    });
+  });
 
-    // Store the token in redis with an expiration of 24 hours
-    const key = `auth_${token}`;
-    const value = user._id.toString();
-    await redisClient.set(key, value, 86400);
+  describe('+ GET: /disconnect', () => {
+    it('+ Fails with no "X-Token" header field', function (done) {
+      this.timeout(5000);
+      request.get('/disconnect')
+        .expect(401)
+        .end((requestErr, res) => {
+          if (requestErr) {
+            return done(requestErr);
+          }
+          expect(res.body).to.deep.eql({ error: 'Unauthorized' });
+          done();
+        });
+    });
 
-    // Set the token in the response header and return it in a JSON response
-    res.set('X-Token', token);
-    res.status(200).send({ token });
-  }
+    it('+ Fails for a non-existent user', function (done) {
+      this.timeout(5000);
+      request.get('/disconnect')
+        .set('X-Token', 'raboof')
+        .expect(401)
+        .end((requestErr, res) => {
+          if (requestErr) {
+            return done(requestErr);
+          }
+          expect(res.body).to.deep.eql({ error: 'Unauthorized' });
+          done();
+        });
+    });
 
-  // sign-out a user based on a token
-  static async getDisconnect(req, res) {
-    // Obtain the Authorization token from the header
-    const token = req.headers['x-token'];
-    const userId = await getUserByToken(req);
-    if (!userId) {
-      res.status(401).send({ error: 'Unauthorized' });
-      return;
-    }
-
-    // Delete the token from redis
-    await redisClient.del(`auth_${token}`);
-    res.status(204).end();
-  }
-}
+    it('+ Succeeds with a valid "X-Token" field', function (done) {
+      request.get('/disconnect')
+        .set('X-Token', token)
+        .expect(204)
+        .end((err, res) => {
+          if (err) {
+            return done(err);
+          }
+          expect(res.body).to.deep.eql({});
+          expect(res.text).to.eql('');
+          expect(res.headers['content-type']).to.not.exist;
+          expect(res.headers['content-length']).to.not.exist;
+          done();
+        });
+    });
+  });
+});

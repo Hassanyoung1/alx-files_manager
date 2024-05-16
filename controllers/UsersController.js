@@ -1,49 +1,90 @@
-import { createHash } from 'crypto';
-import Queue from 'bull';
+/* eslint-disable import/no-named-as-default */
+import dbClient from '../../utils/db';
 
-import dbClient from '../utils/db';
-import getUserByToken from '../utils/getUser';
+describe('+ UserController', () => {
+  const mockUser = {
+    email: 'beloxxi@blues.com',
+    password: 'melody1982',
+  };
 
-export default class UsersController {
-  static async postNew(req, res) {
-    const userQueue = Queue('userQueue', 'redis://127.0.0.1:6379');
-    try {
-      const { email, password } = req.body;
-      if (!email) return res.status(400).send({ error: 'Missing email' });
-      if (!password) return res.status(400).send({ error: 'Missing password' });
+  before(function (done) {
+    this.timeout(10000);
+    dbClient.usersCollection()
+      .then((usersCollection) => {
+        usersCollection.deleteMany({ email: mockUser.email })
+          .then(() => done())
+          .catch((deleteErr) => done(deleteErr));
+      }).catch((connectErr) => done(connectErr));
+    setTimeout(done, 5000);
+  });
 
-      const user = await dbClient.db.collection('users').findOne({ email });
-      if (user) return res.status(400).send({ error: 'Already exist' });
+  describe('+ POST: /users', () => {
+    it('+ Fails when there is no email and there is password', function (done) {
+      this.timeout(5000);
+      request.post('/users')
+        .send({
+          password: mockUser.password,
+        })
+        .expect(400)
+        .end((err, res) => {
+          if (err) {
+            return done(err);
+          }
+          expect(res.body).to.deep.eql({ error: 'Missing email' });
+          done();
+        });
+    });
 
-      const hashedPassword = createHash('sha1').update(password).digest('hex');
-      const result = await dbClient.db.collection('users').insertOne({ email, password: hashedPassword });
-      // Add a userQueue job
-      userQueue.add({ userId: result.insertedId });
+    it('+ Fails when there is email and there is no password', function (done) {
+      this.timeout(5000);
+      request.post('/users')
+        .send({
+          email: mockUser.email,
+        })
+        .expect(400)
+        .end((err, res) => {
+          if (err) {
+            return done(err);
+          }
+          expect(res.body).to.deep.eql({ error: 'Missing password' });
+          done();
+        });
+    });
 
-      return res.status(201).send({ id: result.insertedId, email });
-    } catch (error) {
-      console.error('Error creating user:', error);
-      return res.status(500).json({ error: 'Internal server error' });
-    }
-  }
+    it('+ Succeeds when the new user has a password and email', function (done) {
+      this.timeout(5000);
+      request.post('/users')
+        .send({
+          email: mockUser.email,
+          password: mockUser.password,
+        })
+        .expect(201)
+        .end((err, res) => {
+          if (err) {
+            return done(err);
+          }
+          expect(res.body.email).to.eql(mockUser.email);
+          expect(res.body.id.length).to.be.greaterThan(0);
+          done();
+        });
+    });
 
-  // Retrieve the user based on the token
-  static async getMe(req, res) {
-    // Authenticate user by token
-    const userId = await getUserByToken(req);
-    if (!userId) {
-      res.status(401).send({ error: 'Unauthorized' });
-      return;
-    }
+    it('+ Fails when the user already exists', function (done) {
+      this.timeout(5000);
+      request.post('/users')
+        .send({
+          email: mockUser.email,
+          password: mockUser.password,
+        })
+        .expect(400)
+        .end((err, res) => {
+          if (err) {
+            return done(err);
+          }
+          expect(res.body).to.deep.eql({ error: 'Already exist' });
+          done();
+        });
+    });
+  });
 
-    // Fetch the user from the database
-    const user = await dbClient.getUserBy({ _id: userId });
-    if (!user) {
-      res.status(401).send({ error: 'Unauthorized' });
-      return;
-    }
-
-    // Return the user information in a JSON response
-    res.status(200).send({ id: user._id, email: user.email });
-  }
-}
+});
